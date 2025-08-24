@@ -3,14 +3,20 @@ import json
 import requests
 import asyncio
 from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+# CommandHandler را اضافه می‌کنیم
+from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 
-# --- تنظیمات اصلی از Environment Variables ---
+# --- تنظیمات اصلی (بدون تغییر) ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SPEECHMATICS_API_KEY = os.environ.get("SPEECHMATICS_API_KEY")
 SPEECHMATICS_URL = "https://asr.api.speechmatics.com/v2/jobs/"
 
-# این تابع اصلی ربات است و بدون تغییر باقی می‌ماند
+# --- تابع جدید برای پاسخ به سلام ---
+async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """به دستور /salam پاسخ می‌دهد."""
+    await update.message.reply_text("سلام")
+
+# --- تابع پردازش صوت (بدون تغییر) ---
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     file_id = update.message.audio.file_id
     new_file = await context.bot.get_file(file_id)
@@ -39,7 +45,7 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 transcribed_text = result_response.text
                 break
             elif result_response.status_code == 404:
-                await asyncio.sleep(10) # استفاده از asyncio.sleep به جای time.sleep
+                await asyncio.sleep(10)
             else:
                 result_response.raise_for_status()
 
@@ -56,27 +62,26 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         print(f"An error occurred: {e}")
         await update.message.reply_text(f"متاسفانه در پردازش فایل خطایی رخ داد.")
 
-# --- بخش اصلی برنامه (کاملاً تغییر یافته) ---
+# --- بخش اصلی برنامه (با تغییر کوچک) ---
 async def main():
     """ربات را راه‌اندازی و اجرا می‌کند."""
     
-    # ساخت اپلیکیشن ربات
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
+    # --- اضافه کردن CommandHandler جدید ---
+    # این خط به ربات یاد می‌دهد که به دستور /salam پاسخ دهد
+    application.add_handler(CommandHandler("salam", hello))
+    
     # اضافه کردن handler برای پیام‌های صوتی
     application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
 
-    # این بخش ربات را به صورت ناهمزمان اجرا می‌کند
-    # و دیگر نیازی به ترد و وب سرور جداگانه نیست
     print("Bot is starting in async mode...")
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
 
-    # این حلقه بی‌نهایت، اسکریپت را زنده نگه می‌دارد
     while True:
-        await asyncio.sleep(3600) # هر یک ساعت یک بار بیدار می‌شود تا سرویس خاموش نشود
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    # اجرای حلقه asyncio
     asyncio.run(main())
