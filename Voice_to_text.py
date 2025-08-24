@@ -2,19 +2,17 @@ import os
 import json
 import requests
 import time
+import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from threading import Thread
 
 # --- تنظیمات اصلی از Environment Variables ---
-# توکن‌ها را دیگر مستقیم در کد وارد نمی‌کنیم
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SPEECHMATICS_API_KEY = os.environ.get("SPEECHMATICS_API_KEY")
-
 SPEECHMATICS_URL = "https://asr.api.speechmatics.com/v2/jobs/"
 
+# این تابع اصلی ربات است و بدون تغییر باقی می‌ماند
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """فایل صوتی را پردازش می‌کند."""
     file_id = update.message.audio.file_id
     new_file = await context.bot.get_file(file_id)
     
@@ -42,7 +40,7 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 transcribed_text = result_response.text
                 break
             elif result_response.status_code == 404:
-                time.sleep(10)
+                await asyncio.sleep(10) # استفاده از asyncio.sleep به جای time.sleep
             else:
                 result_response.raise_for_status()
 
@@ -59,28 +57,28 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         print(f"An error occurred: {e}")
         await update.message.reply_text(f"متاسفانه در پردازش فایل خطایی رخ داد.")
 
-def run_bot():
-    """ربات تلگرام را اجرا می‌کند."""
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
-    print("Bot is running in polling mode...")
-    application.run_polling()
-
-# این بخش برای زنده نگه داشتن سرویس در Render است
-if __name__ == "__main__":
-    # اجرای ربات در یک ترد جداگانه
-    bot_thread = Thread(target=run_bot)
-    bot_thread.start()
+# --- بخش اصلی برنامه (کاملاً تغییر یافته) ---
+async def main():
+    """ربات را راه‌اندازی و اجرا می‌کند."""
     
-    # این بخش یک سرور وب ساده ایجاد می‌کند تا Render سرویس را فعال نگه دارد
-    # شما نیازی به درک کامل این قسمت ندارید
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-    class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b'Bot is running!')
+    # ساخت اپلیکیشن ربات
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    print("Starting dummy HTTP server...")
-    httpd = HTTPServer(('0.0.0.0', 8080), SimpleHTTPRequestHandler)
-    httpd.serve_forever()
+    # اضافه کردن handler برای پیام‌های صوتی
+    application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
+
+    # این بخش ربات را به صورت ناهمزمان اجرا می‌کند
+    # و دیگر نیازی به ترد و وب سرور جداگانه نیست
+    print("Bot is starting in async mode...")
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+
+    # این حلقه بی‌نهایت، اسکریپت را زنده نگه می‌دارد
+    while True:
+        await asyncio.sleep(3600) # هر یک ساعت یک بار بیدار می‌شود تا سرویس خاموش نشود
+
+if __name__ == "__main__":
+    # اجرای حلقه asyncio
+    asyncio.run(main())
+
