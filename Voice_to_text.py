@@ -1,7 +1,6 @@
 import os
 import json
 import requests
-import time
 import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
@@ -81,4 +80,3 @@ async def main():
 if __name__ == "__main__":
     # اجرای حلقه asyncio
     asyncio.run(main())
-
