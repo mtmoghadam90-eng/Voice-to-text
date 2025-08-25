@@ -7,14 +7,14 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from flask import Flask
 
-# --- تنظیمات اصلی از Environment Variables ---
+# --- تنظیمات اصلی ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SPEECHMATICS_API_KEY = os.environ.get("SPEECHMATICS_API_KEY")
 SPEECHMATICS_URL = "https://asr.api.speechmatics.com/v2/jobs/"
 
-# --- بخش ربات تلگرام (بدون تغییر) ---
+# --- بخش ربات تلگرام ---
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # این تابع دقیقاً مانند قبل است
+    # این تابع بدون تغییر است
     file_id = update.message.audio.file_id
     new_file = await context.bot.get_file(file_id)
     file_path = f"{file_id}.oga"
@@ -45,39 +45,38 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         os.remove(file_path)
         os.remove(text_file_path)
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"Bot Error: {e}")
         await update.message.reply_text(f"متاسفانه در پردازش فایل خطایی رخ داد.")
 
 async def main_bot():
     """تابع اصلی برای اجرای ربات."""
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
-    print("Bot is starting in async mode...")
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
+    print("Bot is starting polling...")
+    await application.run_polling()
 
 # --- بخش وب سرور Flask ---
+# این بخش برای پاسخ دادن به Render است
 app = Flask(__name__)
 
 @app.route('/')
 def index():
-    """یک صفحه وب ساده برای پاسخ به Render."""
     return "Bot is running!"
 
-def run_flask():
-    """وب سرور را اجرا می‌کند."""
-    # پورت توسط Render به صورت خودکار تنظیم می‌شود
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+# --- اجرای همزمان ---
+def run_bot_in_background():
+    """ربات را در یک ترد جداگانه اجرا می‌کند."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main_bot())
 
-# --- اجرای همزمان هر دو ---
 if __name__ == "__main__":
-    # اجرای ربات در یک ترد جداگانه
-    bot_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(bot_loop)
-    bot_loop.run_until_complete(main_bot())
-    
+    # اجرای ربات در پس‌زمینه
+    bot_thread = threading.Thread(target=run_bot_in_background)
+    bot_thread.daemon = True
+    bot_thread.start()
+
     # اجرای وب سرور در ترد اصلی
-    # (این بخش به دلیل ساختار Render اجرا نخواهد شد، اما برای تست محلی مفید است)
-    # Render فقط `run_flask` را از طریق Start Command اجرا می‌کند
-    # برای حل این مشکل، ما Start Command را تغییر می‌دهیم
+    # Gunicorn این فایل را اجرا می‌کند و متغیر 'app' را پیدا می‌کند
+    # بنابراین نیازی به app.run() نیست
+    print("Flask app is ready to be served by Gunicorn.")
